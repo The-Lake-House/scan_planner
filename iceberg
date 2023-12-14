@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+
+import argparse
+import fastavro
+import json
+import pymetastore.metastore
+import sys
+
+import utils
+
+parser = argparse.ArgumentParser()
+parser.add_argument('database_name')
+parser.add_argument('table_name')
+parser.add_argument('--hms-host', default='localhost')
+parser.add_argument('--hms-port', default=9083)
+args = parser.parse_args()
+
+with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as hms:
+    try:
+        database = hms.get_database(name=args.database_name)
+    except pymetastore.hive_metastore.ttypes.NoSuchObjectException:
+        print(f'Database {args.database_name} does not exist', file=sys.stderr)
+        sys.exit(1)
+    try:
+        table = hms.get_table(
+            database_name=args.database_name,
+            table_name=args.table_name,
+        )
+    except pymetastore.hive_metastore.ttypes.NoSuchObjectException:
+        print(f'Table {args.table_name} does not exist', file=sys.stderr)
+        sys.exit(1)
+    s3_bucket, s3_key = utils.parse_s3a(table.parameters['metadata_location'])
+    table_metadata = json.loads(utils.s3_get(s3_bucket, s3_key))
+    # Assumption: last version is latest version
+    # Better approach: current-snapshot-id
+    s3_bucket, s3_manifest_list_key = utils.parse_s3a(table_metadata['snapshots'][-1]['manifest-list'])
+    reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_list_key, binary=True))
+    manifests = []
+    for record in reader:
+        manifests.append(record['manifest_path'])
+    data_files = []
+    for manifest in manifests:
+        s3_bucket, s3_manifest_key = utils.parse_s3a(manifest)
+        reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_key, binary=True))
+        for record in reader:
+            if record['status'] == 1:
+                data_files.append(record['data_file']['file_path'])
+    for data_file in data_files:
+        print(f'{data_file}')

@@ -1,0 +1,55 @@
+#!/usr/bin/env python
+
+import argparse
+import json
+import pymetastore.metastore
+import sys
+import uuid
+import zmq.utils.z85
+
+import utils
+
+parser = argparse.ArgumentParser()
+parser.add_argument('database_name')
+parser.add_argument('table_name')
+parser.add_argument('--hms-host', default='localhost')
+parser.add_argument('--hms-port', default=9083)
+args = parser.parse_args()
+
+with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as hms:
+    try:
+        table = hms.get_table(
+            database_name=args.database_name,
+            table_name=args.table_name,
+        )
+    except pymetastore.hive_metastore.ttypes.NoSuchObjectException:
+        print(f'Table {args.table_name} does not exist', file=sys.stderr)
+        sys.exit(1)
+    s3_bucket, s3_prefix = utils.parse_s3a(table.storage.location)
+    data_files = []
+    i = 0
+    while True:
+        try:
+            version_key = f'{s3_prefix}/_delta_log/{i:020}.json'
+            # Stored as JSONLines
+            for line in utils.s3_get(s3_bucket, version_key).decode().splitlines():
+                version = json.loads(line)
+                if 'add' in version:
+                    op = version['add']
+                    if 'deletionVector' in op:
+                        deletion_vector = op['deletionVector']
+                        if deletion_vector['storageType'] != 'u':
+                            print(f"Unsupported deletion vector storage type: {deletion_vector['storageType']}", file=sys.stderr)
+                            sys.exit(1)
+                        deletion_vector_uuid = uuid.UUID(hex=zmq.utils.z85.decode(deletion_vector['pathOrInlineDv']).hex())
+                        data_files.append(f"{op['path']} + s3a://{s3_bucket}/{s3_prefix}/deletion_vector_{deletion_vector_uuid}.bin")
+                    else:
+                        data_files.append(op['path'])
+                if 'remove' in version:
+                    op = version['remove']
+                    data_files.remove(op['path'])
+            i = i + 1
+        except utils.NoSuchKey:
+            break
+    for data_file in data_files:
+        print(f's3a://{s3_bucket}/{s3_prefix}/{data_file}')
