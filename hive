@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 import argparse
-import pymetastore.metastore
 import sys
+
+import pymetastore.metastore
 
 import utils
 

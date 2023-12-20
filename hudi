@@ -2,9 +2,10 @@
 
 import argparse
 import os
-import pymetastore.metastore
 import re
 import sys
+
+import pymetastore.metastore
 
 import utils
 
