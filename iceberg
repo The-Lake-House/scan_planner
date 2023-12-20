@@ -30,16 +30,13 @@ with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as
     # Assumption: last version is latest version
     # Better approach: current-snapshot-id
     s3_bucket, s3_manifest_list_key = utils.parse_s3a(table_metadata['snapshots'][-1]['manifest-list'])
-    reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_list_key, binary=True))
-    manifests = []
-    for record in reader:
-        manifests.append(record['manifest_path'])
+    manifest_list_reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_list_key, binary=True))
     data_files = []
-    for manifest in manifests:
-        s3_bucket, s3_manifest_key = utils.parse_s3a(manifest)
-        reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_key, binary=True))
-        for record in reader:
-            if record['status'] == 1:
-                data_files.append(record['data_file']['file_path'])
+    for manifest_list in manifest_list_reader:
+        s3_bucket, s3_manifest_key = utils.parse_s3a(manifest_list['manifest_path'])
+        manifest_reader = fastavro.reader(utils.s3_get(s3_bucket, s3_manifest_key, binary=True))
+        for manifest in manifest_reader:
+            if manifest['status'] == 1:
+                data_files.append(manifest['data_file']['file_path'])
     for data_file in data_files:
         print(f'{data_file}')
