@@ -18,11 +18,6 @@ args = parser.parse_args()
 
 with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as hms:
     try:
-        database = hms.get_database(name=args.database_name)
-    except pymetastore.hive_metastore.ttypes.NoSuchObjectException:
-        print(f'Database {args.database_name} does not exist', file=sys.stderr)
-        sys.exit(1)
-    try:
         table = hms.get_table(
             database_name=args.database_name,
             table_name=args.table_name,
