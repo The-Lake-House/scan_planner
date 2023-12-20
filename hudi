@@ -83,5 +83,4 @@ with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as
             if file_obj['type'] == 'base':
                 print(f"s3a://{s3_bucket}/{file_obj['path']}")
                 break
-            else:
-                print(f"s3a://{s3_bucket}/{file_obj['path']}")
+            print(f"s3a://{s3_bucket}/{file_obj['path']}")
