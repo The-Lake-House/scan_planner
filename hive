@@ -24,7 +24,7 @@ with pymetastore.metastore.HMS.create(host=args.hms_host, port=args.hms_port) as
         print(f'Table {args.table_name} does not exist', file=sys.stderr)
         sys.exit(1)
     partition_locations = []
-    if len(table.partition_columns):
+    if table.partition_columns:
         partitions = hms.get_partitions(
             database_name=args.database_name,
             table_name=args.table_name
